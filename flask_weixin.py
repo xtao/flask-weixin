@@ -11,6 +11,8 @@
 
 import time
 import hashlib
+import json
+import urlib2
 from datetime import datetime
 
 try:
@@ -24,6 +26,8 @@ except ImportError:
 __all__ = ('Weixin',)
 __version__ = '0.2.0'
 __author__ = 'Hsiaoming Yang <me@lepture.com>'
+
+CUSTOM_SEND_URL = "https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token={ACCESS_TOKEN}"
 
 
 class Weixin(object):
@@ -49,6 +53,21 @@ class Weixin(object):
         self.token = config.get('WEIXIN_TOKEN', None)
         self.sender = config.get('WEIXIN_SENDER', None)
         self.expires_in = config.get('WEIXIN_EXPIRES_IN', 0)
+
+    def send(self, to_user, type="text", **kwargs):
+        if not self.token:
+            raise RuntimeError('WEIXIN_TOKEN is missing')
+
+        if not to_user:
+            raise RuntimeError('to_user is missing')
+
+        url = CUSTOM_SEND_URL.format(ACCESS_TOKEN=self.token)
+
+        if type == 'text':
+            content = kwargs.get('content', '')
+            return text_send(url, to_user, content)
+
+        return None
 
     def validate(self, signature, timestamp, nonce):
         """Validate request signature.
@@ -361,3 +380,25 @@ def _shared_reply(username, sender, type):
         '<MsgType><![CDATA[%(type)s]]></MsgType>'
     )
     return template % dct
+
+
+def text_send(url, to_user, content):
+    shared = _shared_reply(to_user, 'text')
+    shared['text'] = dict(content=content)
+    return _send(url, json.dumps(shared))
+
+
+def _shared_send(to_user, type):
+    dct = {
+        'to_user': to_user,
+        'type': type,
+    }
+    return dct
+
+
+def _send(url, data):
+    req = urllib2.Request(url, data, {'Content-Type': 'application/json'})
+    f = urllib2.urlopen(req)
+    response = f.read()
+    f.close()
+    return response
